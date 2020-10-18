@@ -1,0 +1,8 @@
+tmp
+.vs
+*.o
+*.out
+*.plist
+nush
+*.user
+*.log
