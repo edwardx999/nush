@@ -15,19 +15,19 @@ typedef enum op_codes {
 	op_semicolon,
 	op_background,
 	op_paren,
-	op_start_paren=op_paren,
+	op_start_paren = op_paren,
 	op_end_paren,
 	op_COUNT,
 	op_execute,
-	op_subshell=op_paren
+	op_subshell = op_paren
 } op_code;
 
-int read_line(string* dst,FILE* file);
+int read_line(string* dst, FILE* file);
 
 /*
 	Turn a c-string into a vector of tokens; operators are represented as data being 0, and _size being op_code.
 */
-void tokenize(string_vector* out,char const* line);
+void tokenize(string_vector* out, char const* line);
 
 int operator_precedence(op_code code);
 
