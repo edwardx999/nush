@@ -268,7 +268,24 @@ builtin_ret exec_builtins(string const* tokens, size_t count)
 			builtin_ret ret = { 1,1 };
 			return ret;
 		}
+		if (count == 0)
+		{
+			builtin_ret ret = { 1, 0 };
+			return ret;
+		}
 		char const* dir = tokens[1].data;
+		if (dir[0] == '$')
+		{
+			char* value = getenv(dir + 1);
+			if (value)
+			{
+				dir = value;
+			}
+			else
+			{
+				dir = "";
+			}
+		}
 		if (chdir(dir))
 		{
 			int err = errno;
@@ -304,12 +321,20 @@ builtin_ret exec_builtins(string const* tokens, size_t count)
 void exec_direct_no_builtins(string const* tokens, size_t count)
 {
 	char* args[count + 1];
+	char empty[] = "";
 	for (size_t i = 0; i < count; ++i)
 	{
-		char* value = getenv(tokens[i].data);
-		if (value)
+		if (tokens[i].data[0] == '$')
 		{
-			args[i] = value;
+			char* value = getenv(tokens[i].data + 1);
+			if (value)
+			{
+				args[i] = value;
+			}
+			else
+			{
+				args[i] = empty;
+			}
 		}
 		else
 		{
