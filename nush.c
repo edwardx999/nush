@@ -10,8 +10,6 @@
 #include "tokens.h"
 #include "int_vector.h"
 
-string_vector variables; // Most efficient for small number of variables
-
 int_vector unwatched_children;
 
 void dump_rp(string_vector const* reverse_polish)
@@ -60,48 +58,6 @@ void wait_for_children()
 		int status;
 		waitpid(unwatched_children.data[i], &status, 0);
 	}
-}
-
-string const* search_var(string const* target)
-{
-	size_t const size = string_size(target);
-	if (size == 0)
-	{
-		return 0;
-	}
-	if (target->data[0] != '$')
-	{
-		return 0;
-	}
-	size_t const real_size = size - 1;
-	for (size_t i = 0; i < variables.size; i += 2)
-	{
-		string const* var_name = &variables.data[i];
-		if (string_size(var_name) == real_size && memcmp(var_name->data, target->data + 1, real_size) == 0)
-		{
-			return &variables.data[i + 1];
-		}
-	}
-	static string empty = {};
-	if (empty.data == 0)
-	{
-		string_default_construct(&empty);
-	}
-	return &empty;
-}
-
-void insert_variable(string* key, string* value)
-{
-	for (size_t i = 0; i < variables.size; i += 2)
-	{
-		if (string_equal(&variables.data[i], key))
-		{
-			string_move_assign(&variables.data[i + 1], value);
-			return;
-		}
-	}
-	string_vector_push_back_move(&variables, key);
-	string_vector_push_back_move(&variables, value);
 }
 
 char const* get_chdir_err(int err)
@@ -336,9 +292,7 @@ builtin_ret exec_builtins(string const* tokens, size_t count)
 	else if ((equal_sign_loc = find_equal_sign(tokens->data)) != -1)
 	{
 		string key; string_construct(&key, tokens->data, equal_sign_loc);
-		string value; string_construct_cstr(&value, tokens->data + equal_sign_loc + 1);
-		insert_variable(&key, &value);
-		string_destruct(&value);
+		setenv(string_data(&key), tokens->data + equal_sign_loc + 1, 1);
 		string_destruct(&key);
 		builtin_ret ret = { 1,0 };
 		return ret;
@@ -352,10 +306,10 @@ void exec_direct_no_builtins(string const* tokens, size_t count)
 	char* args[count + 1];
 	for (size_t i = 0; i < count; ++i)
 	{
-		string const* value = search_var(&tokens[i]);
+		char* value = getenv(tokens[i].data);
 		if (value)
 		{
-			args[i] = value->data;
+			args[i] = value;
 		}
 		else
 		{
@@ -366,25 +320,17 @@ void exec_direct_no_builtins(string const* tokens, size_t count)
 	execvp(args[0], args);
 }
 
-void exec_direct(string const* tokens, size_t count)
-{
-	builtin_ret r = exec_builtins(tokens, count);
-	if (r.execed)
-	{
-		exit(r.ret_code);
-	}
-	exec_direct_no_builtins(tokens, count);
-}
-
 int exec_one_command(string const* tokens, size_t count)
 {
-	builtin_ret r = exec_builtins(tokens, count);
-	if (r.execed)
 	{
-		return r.ret_code;
+		builtin_ret const r = exec_builtins(tokens, count);
+		if (r.execed)
+		{
+			return r.ret_code;
+		}
 	}
-	int cpid;
-	if ((cpid = fork()))
+	int const cpid = fork();
+	if (cpid)
 	{
 		int status;
 		waitpid(cpid, &status, 0);
@@ -444,8 +390,8 @@ int exec_redirect_input(string const* last)
 	{
 		return 1;
 	}
-	int cpid;
-	if ((cpid = fork())) //parent
+	int const cpid = fork();
+	if (cpid) //parent
 	{
 		close(fd);
 		int status;
@@ -465,13 +411,13 @@ int exec_redirect_input(string const* last)
 int exec_redirect_output(string const* last)
 {
 	size_t const in_tree_size = (last - 1)->_cap;
-	int fd = open((last - in_tree_size)->data, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+	int const fd = open((last - in_tree_size)->data, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 	if (fd < 0)
 	{
 		return 1;
 	}
-	int cpid;
-	if ((cpid = fork())) // parent
+	int const cpid = fork();
+	if (cpid) // parent
 	{
 		close(fd);
 		int status;
@@ -490,8 +436,8 @@ int exec_redirect_output(string const* last)
 
 int spawn_subshell(string const* last)
 {
-	int cpid;
-	if ((cpid = fork()))
+	int const cpid = fork();
+	if (cpid)
 	{
 		return cpid;
 	}
@@ -515,7 +461,7 @@ int exec_reverse_polish_help(string const* last)
 	case op_and:
 	{
 		size_t const reader_arg_tree_size = (last - 1)->_cap;
-		int ret = exec_reverse_polish_help(last - reader_arg_tree_size - 1);
+		int const ret = exec_reverse_polish_help(last - reader_arg_tree_size - 1);
 		if (!ret)
 		{
 			return exec_reverse_polish_help(last - 1);
@@ -525,7 +471,7 @@ int exec_reverse_polish_help(string const* last)
 	case op_or:
 	{
 		size_t const reader_arg_tree_size = (last - 1)->_cap;
-		int ret = exec_reverse_polish_help(last - reader_arg_tree_size - 1);
+		int const ret = exec_reverse_polish_help(last - reader_arg_tree_size - 1);
 		if (ret)
 		{
 			return exec_reverse_polish_help(last - 1);
@@ -542,7 +488,7 @@ int exec_reverse_polish_help(string const* last)
 		return exec_reverse_polish_help(last - 1);
 	case op_background:
 	{
-		int id = fork();
+		int const id = fork();
 		if (id)
 		{
 			int_vector_push_back(&unwatched_children, id);
@@ -560,7 +506,7 @@ int exec_reverse_polish_help(string const* last)
 	case op_subshell:
 	{
 		int status;
-		int pid = spawn_subshell(last);
+		int const pid = spawn_subshell(last);
 		waitpid(pid, &status, 0);
 		return WEXITSTATUS(status);
 	}
@@ -592,7 +538,7 @@ int main(int argc, char** argv)
 	atexit(wait_for_children);
 	string_vector tokens; string_vector_default_construct(&tokens);
 	string_vector reverse_polish; string_vector_default_construct(&reverse_polish);
-	int_vector stack; string_vector_default_construct(&stack);
+	int_vector stack; int_vector_default_construct(&stack);
 	size_t_vector work_space; size_t_vector_default_construct(&work_space);
 	if (argc == 1)
 	{
