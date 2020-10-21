@@ -318,6 +318,8 @@ void exec_direct_no_builtins(string const* tokens, size_t count)
 	}
 	args[count] = 0;
 	execvp(args[0], args);
+	printf("Command %s not found\n", args[0]);
+	exit(1);
 }
 
 int exec_one_command(string const* tokens, size_t count)
